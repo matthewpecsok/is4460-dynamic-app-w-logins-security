@@ -1,0 +1,18 @@
+{% extends 'shop/base.html' %}
+
+{% block content %}
+<h1>Order #{{ order.pk }}</h1>
+<p>Customer: {{ order.customer_name }}</p>
+<h2>Products</h2>
+<ul>
+    {% for product in order.products.all %}
+        <li>{{ product.name }} - ${{ product.price }}</li>
+    {% empty %}
+        <li>No products in this order.</li>
+    {% endfor %}
+</ul>
+<div class="actions">
+    <a href="{% url 'order_update' order.pk %}">Edit</a>
+    <a href="{% url 'order_delete' order.pk %}">Delete</a>
+</div>
+{% endblock %}

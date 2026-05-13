@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flower Shop</title>
+    <style>
+        body { font-family: sans-serif; margin: 2rem; background: #f5f7fb; color: #1a2433; }
+        nav a { margin-right: 1rem; }
+        .shell { max-width: 1100px; margin: 0 auto; background: #ffffff; padding: 1.25rem; border-radius: 10px; box-shadow: 0 8px 24px rgba(20, 35, 60, 0.08); }
+        .actions a, .actions button { margin-right: 0.5rem; }
+        ul { padding-left: 1.25rem; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; }
+        .card { border: 1px solid #dae2ef; border-radius: 8px; padding: 0.75rem; background: #fafcff; }
+        .metric { font-size: 1.6rem; font-weight: 700; margin: 0.25rem 0 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #e5ebf5; text-align: left; padding: 0.45rem; font-size: 0.92rem; }
+        .badge { display: inline-block; min-width: 56px; text-align: center; padding: 0.2rem 0.4rem; border-radius: 12px; font-size: 0.75rem; }
+        .badge.info { background: #dbeafe; color: #1e3a8a; }
+        .badge.warning { background: #fef3c7; color: #92400e; }
+        .badge.error { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <nav>
+            <a href="{% url 'home' %}">Home</a>
+            <a href="{% url 'product_list' %}">Products</a>
+            <a href="{% url 'order_list' %}">Orders</a>
+            <a href="{% url 'dashboard' %}">Dashboard</a>
+        </nav>
+        <hr>
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

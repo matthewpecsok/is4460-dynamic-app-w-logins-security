@@ -1,0 +1,16 @@
+{% extends 'shop/base.html' %}
+
+{% block content %}
+<h1>Orders</h1>
+<p><a href="{% url 'order_create' %}">Create Order</a></p>
+<ul>
+    {% for order in orders %}
+        <li>
+            <a href="{% url 'order_detail' order.pk %}">Order #{{ order.pk }}</a>
+            for {{ order.customer_name }}
+        </li>
+    {% empty %}
+        <li>No orders created.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

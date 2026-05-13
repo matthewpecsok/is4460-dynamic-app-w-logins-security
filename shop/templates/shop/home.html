@@ -1,0 +1,35 @@
+{% extends 'shop/base.html' %}
+
+{% block content %}
+<h1>Online Flower Shop</h1>
+<p>Welcome to the shop homepage.</p>
+
+<div class="actions">
+    <a href="{% url 'product_create' %}">Add Product</a>
+    <a href="{% url 'order_create' %}">Create Order</a>
+</div>
+
+<h2>Products</h2>
+<ul>
+    {% for product in products %}
+        <li>
+            <a href="{% url 'product_detail' product.pk %}">{{ product.name }}</a>
+            - ${{ product.price }}
+        </li>
+    {% empty %}
+        <li>No products yet.</li>
+    {% endfor %}
+</ul>
+
+<h2>Recent Orders</h2>
+<ul>
+    {% for order in orders %}
+        <li>
+            <a href="{% url 'order_detail' order.pk %}">Order #{{ order.pk }}</a>
+            for {{ order.customer_name }}
+        </li>
+    {% empty %}
+        <li>No orders yet.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
