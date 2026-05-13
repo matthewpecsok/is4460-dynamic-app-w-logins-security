@@ -11,6 +11,7 @@
 
 <form method="post" style="max-width: 400px;">
     {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.GET.next|default:'' }}">
     <div style="margin-bottom: 1rem;">
         <label for="username" style="display: block; margin-bottom: 0.5rem; font-weight: bold;">Username:</label>
         <input type="text" id="username" name="username" required style="width: 100%; padding: 0.5rem; border: 1px solid #dae2ef; border-radius: 4px; box-sizing: border-box;">

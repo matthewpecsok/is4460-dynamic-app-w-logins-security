@@ -15,6 +15,15 @@ def test_homepage_loads(client):
 
 
 @pytest.mark.django_db
+def test_homepage_lists_products(client, product):
+	response = client.get(reverse("home"))
+
+	assert response.status_code == 200
+	assert b"Rose Bouquet" in response.content
+	assert b"Buy Now" in response.content
+
+
+@pytest.mark.django_db
 def test_dashboard_loads(employee_client):
 	response = employee_client.get(reverse("dashboard"))
 
@@ -155,9 +164,9 @@ def order(products):
 
 
 @pytest.mark.django_db
-def test_create_order_with_multiple_products(customer_client, products):
+def test_create_order_with_multiple_products(employee_client, products):
 	product_one, product_two = products
-	response = customer_client.post(
+	response = employee_client.post(
 		reverse("order_create"),
 		{
 			"customer_name": "Bob",
@@ -170,6 +179,117 @@ def test_create_order_with_multiple_products(customer_client, products):
 	created_order = Order.objects.get(customer_name="Bob")
 	assert created_order.products.count() == 2
 	assert response["Location"] == reverse("order_detail", kwargs={"pk": created_order.pk})
+
+
+@pytest.mark.django_db
+def test_checkout_requires_login(client, product):
+	response = client.get(reverse("checkout", kwargs={"pk": product.pk}))
+
+	assert response.status_code == 302
+	assert reverse("login") in response["Location"]
+	assert "next=" in response["Location"]
+
+
+@pytest.mark.django_db
+def test_login_redirects_to_checkout_next_url(client, product):
+	user = User.objects.create_user(username="checkout_user", password="pass123")
+	next_url = reverse("checkout", kwargs={"pk": product.pk})
+
+	response = client.post(
+		f"{reverse('login')}?next={next_url}",
+		{
+			"username": "checkout_user",
+			"password": "pass123",
+		},
+	)
+
+	assert response.status_code == 302
+	assert response["Location"] == next_url
+
+
+@pytest.mark.django_db
+def test_customer_checkout_creates_order_with_billing(customer_client, customer_user, product):
+	response = customer_client.post(
+		reverse("checkout", kwargs={"pk": product.pk}),
+		{
+			"billing_name": "Customer Test",
+			"billing_email": "customer@example.com",
+			"billing_address": "123 Flower Lane",
+			"billing_city": "Bloomfield",
+			"billing_state": "UT",
+			"billing_zip": "84101",
+		},
+	)
+
+	assert response.status_code == 302
+	created_order = Order.objects.get()
+	assert created_order.customer == customer_user
+	assert created_order.customer_name == customer_user.username
+	assert created_order.billing_email == "customer@example.com"
+	assert list(created_order.products.values_list("pk", flat=True)) == [product.pk]
+	assert response["Location"] == reverse("customer_order_detail", kwargs={"pk": created_order.pk})
+
+
+@pytest.mark.django_db
+def test_checkout_requires_billing_details(customer_client, product):
+	response = customer_client.post(
+		reverse("checkout", kwargs={"pk": product.pk}),
+		{
+			"billing_name": "",
+			"billing_email": "",
+			"billing_address": "",
+			"billing_city": "",
+			"billing_state": "",
+			"billing_zip": "",
+		},
+	)
+
+	assert response.status_code == 200
+	assert Order.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_customer_order_history_only_shows_current_customer(customer_client, customer_user, products):
+	product_one, product_two = products
+	other_customer = User.objects.create_user(username="other_customer", password="pass123")
+	customer_order = Order.objects.create(customer=customer_user, customer_name="Customer Test")
+	customer_order.products.add(product_one)
+	other_order = Order.objects.create(customer=other_customer, customer_name="Other Customer")
+	other_order.products.add(product_two)
+
+	response = customer_client.get(reverse("customer_order_history"))
+
+	assert response.status_code == 200
+	assert b"Tulip Bunch" in response.content
+	assert b"Lily Arrangement" not in response.content
+
+
+@pytest.mark.django_db
+def test_customer_can_view_own_order_receipt(customer_client, customer_user, product):
+	order = Order.objects.create(
+		customer=customer_user,
+		customer_name="Customer Test",
+		billing_email="customer@example.com",
+	)
+	order.products.add(product)
+
+	response = customer_client.get(reverse("customer_order_detail", kwargs={"pk": order.pk}))
+
+	assert response.status_code == 200
+	assert b"Receipt" in response.content
+	assert b"Rose Bouquet" in response.content
+	assert b"customer@example.com" in response.content
+
+
+@pytest.mark.django_db
+def test_customer_cannot_view_another_customers_order(customer_client, product):
+	other_customer = User.objects.create_user(username="other_customer", password="pass123")
+	order = Order.objects.create(customer=other_customer, customer_name="Other Customer")
+	order.products.add(product)
+
+	response = customer_client.get(reverse("customer_order_detail", kwargs={"pk": order.pk}))
+
+	assert response.status_code == 404
 
 
 @pytest.mark.django_db
@@ -453,8 +573,41 @@ def test_customer_cannot_create_product(client):
 
 
 @pytest.mark.django_db
+def test_customer_can_view_products(customer_client, product):
+	response = customer_client.get(reverse("product_list"))
+
+	assert response.status_code == 200
+	assert b"Rose Bouquet" in response.content
+
+
+@pytest.mark.django_db
+def test_customer_cannot_update_product(customer_client, product):
+	response = customer_client.post(
+		reverse("product_update", kwargs={"pk": product.pk}),
+		{
+			"name": "Changed By Customer",
+			"description": "Should not update.",
+			"price": "10.00",
+			"in_stock": True,
+		},
+	)
+
+	assert response.status_code == 403
+	product.refresh_from_db()
+	assert product.name == "Rose Bouquet"
+
+
+@pytest.mark.django_db
+def test_customer_cannot_delete_product(customer_client, product):
+	response = customer_client.post(reverse("product_delete", kwargs={"pk": product.pk}))
+
+	assert response.status_code == 403
+	assert Product.objects.filter(pk=product.pk).exists()
+
+
+@pytest.mark.django_db
 def test_customer_can_create_order(client):
-	"""Test that customer can create an order"""
+	"""Test that customers can create an order"""
 	customer_group, _ = Group.objects.get_or_create(name="customer")
 	customer = User.objects.create_user(username="cust2", password="pass123")
 	customer.groups.add(customer_group)
@@ -471,14 +624,22 @@ def test_customer_can_create_order(client):
 	response = client.post(
 		reverse("order_create"),
 		{
-			"customer_name": "Customer Test",
 			"products": [product.pk],
+			"billing_name": "Customer Test",
+			"billing_email": "customer@example.com",
+			"billing_address": "123 Flower Lane",
+			"billing_city": "Bloomfield",
+			"billing_state": "UT",
+			"billing_zip": "84101",
 		},
 	)
 
 	assert response.status_code == 302
-	created_order = Order.objects.get(customer_name="Customer Test")
-	assert created_order.customer == customer
+	created_order = Order.objects.get(customer=customer)
+	assert created_order.customer_name == "cust2"
+	assert created_order.billing_email == "customer@example.com"
+	assert list(created_order.products.values_list("pk", flat=True)) == [product.pk]
+	assert response["Location"] == reverse("order_detail", kwargs={"pk": created_order.pk})
 
 
 @pytest.mark.django_db
@@ -513,6 +674,111 @@ def test_employee_can_view_order_list(client):
 
 	assert response.status_code == 200
 	assert b"Someone Else" in response.content
+
+
+@pytest.mark.django_db
+def test_customer_can_view_own_orders_in_order_list(customer_client, customer_user, products):
+	product_one, product_two = products
+	other_customer = User.objects.create_user(username="other_customer", password="pass123")
+	customer_order = Order.objects.create(customer=customer_user, customer_name="Customer Test")
+	customer_order.products.add(product_one)
+	other_order = Order.objects.create(customer=other_customer, customer_name="Other Customer")
+	other_order.products.add(product_two)
+
+	response = customer_client.get(reverse("order_list"))
+
+	assert response.status_code == 200
+	assert b"Tulip Bunch" in response.content
+	assert b"Lily Arrangement" not in response.content
+
+
+@pytest.mark.django_db
+def test_customer_can_update_own_order(customer_client, customer_user, products):
+	product_one, product_two = products
+	order = Order.objects.create(
+		customer=customer_user,
+		customer_name="Customer Test",
+		billing_name="Old Name",
+		billing_email="old@example.com",
+		billing_address="1 Old Street",
+		billing_city="Oldtown",
+		billing_state="UT",
+		billing_zip="84000",
+	)
+	order.products.add(product_one)
+
+	response = customer_client.post(
+		reverse("order_update", kwargs={"pk": order.pk}),
+		{
+			"products": [product_two.pk],
+			"billing_name": "Updated Customer",
+			"billing_email": "updated@example.com",
+			"billing_address": "123 Flower Lane",
+			"billing_city": "Bloomfield",
+			"billing_state": "UT",
+			"billing_zip": "84101",
+		},
+	)
+
+	assert response.status_code == 302
+	order.refresh_from_db()
+	assert order.customer == customer_user
+	assert order.customer_name == customer_user.username
+	assert order.billing_email == "updated@example.com"
+	assert list(order.products.values_list("pk", flat=True)) == [product_two.pk]
+
+
+@pytest.mark.django_db
+def test_customer_cannot_update_another_customers_order(customer_client, product):
+	other_customer = User.objects.create_user(username="other_customer", password="pass123")
+	order = Order.objects.create(customer=other_customer, customer_name="Other Customer")
+	order.products.add(product)
+
+	response = customer_client.post(
+		reverse("order_update", kwargs={"pk": order.pk}),
+		{
+			"products": [product.pk],
+			"billing_name": "Updated Customer",
+			"billing_email": "updated@example.com",
+			"billing_address": "123 Flower Lane",
+			"billing_city": "Bloomfield",
+			"billing_state": "UT",
+			"billing_zip": "84101",
+		},
+	)
+
+	assert response.status_code == 404
+	order.refresh_from_db()
+	assert order.billing_email == ""
+
+
+@pytest.mark.django_db
+def test_customer_cannot_delete_order(customer_client, customer_user, product):
+	order = Order.objects.create(customer=customer_user, customer_name="Customer Test")
+	order.products.add(product)
+
+	response = customer_client.post(reverse("order_delete", kwargs={"pk": order.pk}))
+
+	assert response.status_code == 403
+	assert Order.objects.filter(pk=order.pk).exists()
+
+
+@pytest.mark.django_db
+def test_admin_user_change_page_loads_with_groups(client):
+	admin_user = User.objects.create_superuser(
+		username="admin_user",
+		email="admin@example.com",
+		password="pass123",
+	)
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	employee = User.objects.create_user(username="employee_to_edit", password="pass123")
+	employee.groups.add(employee_group)
+	client.login(username="admin_user", password="pass123")
+
+	response = client.get(reverse("admin:auth_user_change", args=[employee.pk]))
+
+	assert response.status_code == 200
+	assert b"employee" in response.content
 
 
 @pytest.mark.django_db
@@ -574,4 +840,3 @@ def test_base_template_shows_login_when_not_authenticated(client):
 	assert response.status_code == 200
 	assert b"Login" in response.content
 	assert b"Register" in response.content
-

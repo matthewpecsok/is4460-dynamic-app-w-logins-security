@@ -13,8 +13,9 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-	list_display = ("id", "customer_name", "customer", "created_at")
-	search_fields = ("customer_name", "customer__username")
+	list_display = ("id", "customer_name", "customer", "status", "created_at")
+	search_fields = ("customer_name", "customer__username", "billing_email")
+	list_filter = ("status", "created_at")
 	filter_horizontal = ("products",)
 
 
@@ -28,14 +29,14 @@ class CustomUserAdmin(BaseUserAdmin):
 
 	def get_fieldsets(self, request, obj=None):
 		fieldsets = super().get_fieldsets(request, obj)
-		# Add groups field to the form
 		if obj:  # Editing an existing user
 			fieldsets = list(fieldsets)
-			# Find the 'Permissions' fieldset and add groups
 			for i, (section_name, section) in enumerate(fieldsets):
 				if section_name == "Permissions":
-					new_fields = list(section['fields']) + ('groups',)
-					fieldsets[i] = (section_name, {**section, 'fields': new_fields})
+					fields = list(section["fields"])
+					if "groups" not in fields:
+						fields.append("groups")
+					fieldsets[i] = (section_name, {**section, "fields": fields})
 					break
 		return fieldsets
 

@@ -2,6 +2,9 @@ from django.urls import path
 
 from .views import (
     DashboardView,
+    CheckoutView,
+    CustomerOrderDetailView,
+    CustomerOrderHistoryView,
     HomePageView,
     OrderCreateView,
     OrderDeleteView,
@@ -27,8 +30,11 @@ urlpatterns = [
     path("products/", ProductListView.as_view(), name="product_list"),
     path("products/new/", ProductCreateView.as_view(), name="product_create"),
     path("products/<int:pk>/", ProductDetailView.as_view(), name="product_detail"),
+    path("products/<int:pk>/checkout/", CheckoutView.as_view(), name="checkout"),
     path("products/<int:pk>/edit/", ProductUpdateView.as_view(), name="product_update"),
     path("products/<int:pk>/delete/", ProductDeleteView.as_view(), name="product_delete"),
+    path("account/orders/", CustomerOrderHistoryView.as_view(), name="customer_order_history"),
+    path("account/orders/<int:pk>/", CustomerOrderDetailView.as_view(), name="customer_order_detail"),
     path("orders/", OrderListView.as_view(), name="order_list"),
     path("orders/new/", OrderCreateView.as_view(), name="order_create"),
     path("orders/<int:pk>/", OrderDetailView.as_view(), name="order_detail"),
