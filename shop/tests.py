@@ -1,5 +1,7 @@
 import pytest
 from django.urls import reverse
+from django.contrib.auth.models import User, Group
+from django.test import Client
 
 from .models import Order, Product
 
@@ -13,8 +15,8 @@ def test_homepage_loads(client):
 
 
 @pytest.mark.django_db
-def test_dashboard_loads(client):
-	response = client.get(reverse("dashboard"))
+def test_dashboard_loads(employee_client):
+	response = employee_client.get(reverse("dashboard"))
 
 	assert response.status_code == 200
 	assert "shop/dashboard.html" in [t.name for t in response.templates]
@@ -31,9 +33,43 @@ def product(db):
 	)
 
 
+@pytest.fixture
+def employee_user(db):
+	"""Create an authenticated employee user"""
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	user = User.objects.create_user(username="employee_test", password="pass123")
+	user.groups.add(employee_group)
+	return user
+
+
+@pytest.fixture
+def employee_client(employee_user):
+	"""Create a client logged in as an employee"""
+	client = Client()
+	client.login(username="employee_test", password="pass123")
+	return client
+
+
+@pytest.fixture
+def customer_user(db):
+	"""Create an authenticated customer user"""
+	customer_group, _ = Group.objects.get_or_create(name="customer")
+	user = User.objects.create_user(username="customer_test", password="pass123")
+	user.groups.add(customer_group)
+	return user
+
+
+@pytest.fixture
+def customer_client(customer_user):
+	"""Create a client logged in as a customer"""
+	client = Client()
+	client.login(username="customer_test", password="pass123")
+	return client
+
+
 @pytest.mark.django_db
-def test_create_product(client):
-	response = client.post(
+def test_create_product(employee_client):
+	response = employee_client.post(
 		reverse("product_create"),
 		{
 			"name": "Sunflower Bundle",
@@ -66,8 +102,8 @@ def test_retrieve_product_detail(client, product):
 
 
 @pytest.mark.django_db
-def test_update_product(client, product):
-	response = client.post(
+def test_update_product(employee_client, product):
+	response = employee_client.post(
 		reverse("product_update", kwargs={"pk": product.pk}),
 		{
 			"name": "Rose Bouquet Deluxe",
@@ -85,8 +121,8 @@ def test_update_product(client, product):
 
 
 @pytest.mark.django_db
-def test_delete_product(client, product):
-	response = client.post(reverse("product_delete", kwargs={"pk": product.pk}))
+def test_delete_product(employee_client, product):
+	response = employee_client.post(reverse("product_delete", kwargs={"pk": product.pk}))
 
 	assert response.status_code == 302
 	assert response["Location"] == reverse("product_list")
@@ -119,9 +155,9 @@ def order(products):
 
 
 @pytest.mark.django_db
-def test_create_order_with_multiple_products(client, products):
+def test_create_order_with_multiple_products(customer_client, products):
 	product_one, product_two = products
-	response = client.post(
+	response = customer_client.post(
 		reverse("order_create"),
 		{
 			"customer_name": "Bob",
@@ -137,25 +173,25 @@ def test_create_order_with_multiple_products(client, products):
 
 
 @pytest.mark.django_db
-def test_list_orders(client, order):
-	response = client.get(reverse("order_list"))
+def test_list_orders(employee_client, order):
+	response = employee_client.get(reverse("order_list"))
 
 	assert response.status_code == 200
 	assert b"Alice" in response.content
 
 
 @pytest.mark.django_db
-def test_retrieve_order_detail(client, order):
-	response = client.get(reverse("order_detail", kwargs={"pk": order.pk}))
+def test_retrieve_order_detail(employee_client, order):
+	response = employee_client.get(reverse("order_detail", kwargs={"pk": order.pk}))
 
 	assert response.status_code == 200
 	assert b"Tulip Bunch" in response.content
 
 
 @pytest.mark.django_db
-def test_update_order_products(client, order, products):
+def test_update_order_products(employee_client, order, products):
 	_, product_two = products
-	response = client.post(
+	response = employee_client.post(
 		reverse("order_update", kwargs={"pk": order.pk}),
 		{
 			"customer_name": "Alice Cooper",
@@ -170,10 +206,372 @@ def test_update_order_products(client, order, products):
 
 
 @pytest.mark.django_db
-def test_delete_order(client, order):
-	response = client.post(reverse("order_delete", kwargs={"pk": order.pk}))
+def test_delete_order(employee_client, order):
+	response = employee_client.post(reverse("order_delete", kwargs={"pk": order.pk}))
 
 	assert response.status_code == 302
 	assert response["Location"] == reverse("order_list")
 	assert not Order.objects.filter(pk=order.pk).exists()
+
+
+# Authentication Tests
+
+@pytest.mark.django_db
+def test_registration_page_loads(client):
+	"""Test that the registration page loads successfully"""
+	response = client.get(reverse("register"))
+
+	assert response.status_code == 200
+	assert "shop/register.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db
+def test_customer_registration_creates_user(client):
+	"""Test that customer registration creates a user and assigns to customer group"""
+	response = client.post(
+		reverse("register"),
+		{
+			"username": "testcustomer",
+			"email": "customer@example.com",
+			"first_name": "Test",
+			"last_name": "Customer",
+			"password1": "securepass123!",
+			"password2": "securepass123!",
+		},
+	)
+
+	assert response.status_code == 302
+	assert response["Location"] == reverse("login")
+	
+	# Verify user was created
+	user = User.objects.get(username="testcustomer")
+	assert user.email == "customer@example.com"
+	assert user.first_name == "Test"
+	assert user.last_name == "Customer"
+	
+	# Verify user is in customer group
+	assert user.groups.filter(name="customer").exists()
+
+
+@pytest.mark.django_db
+def test_registration_with_duplicate_username_fails(client):
+	"""Test that registration with existing username fails"""
+	User.objects.create_user(username="taken", password="pass123")
+	
+	response = client.post(
+		reverse("register"),
+		{
+			"username": "taken",
+			"email": "newuser@example.com",
+			"first_name": "New",
+			"last_name": "User",
+			"password1": "securepass123!",
+			"password2": "securepass123!",
+		},
+	)
+
+	assert response.status_code == 200
+	assert b"already exists" in response.content or b"username" in response.content
+
+
+@pytest.mark.django_db
+def test_registration_with_mismatched_passwords_fails(client):
+	"""Test that registration with mismatched passwords fails"""
+	response = client.post(
+		reverse("register"),
+		{
+			"username": "testuser",
+			"email": "test@example.com",
+			"first_name": "Test",
+			"last_name": "User",
+			"password1": "securepass123!",
+			"password2": "differentpass123!",
+		},
+	)
+
+	assert response.status_code == 200
+	assert "password" in response.content.decode().lower()
+	assert User.objects.filter(username="testuser").count() == 0
+
+
+@pytest.mark.django_db
+def test_login_page_loads(client):
+	"""Test that the login page loads successfully"""
+	response = client.get(reverse("login"))
+
+	assert response.status_code == 200
+	assert "shop/login.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db
+def test_customer_login_succeeds_and_redirects(client):
+	"""Test that customer can login and is redirected to product_list"""
+	customer_group, _ = Group.objects.get_or_create(name="customer")
+	user = User.objects.create_user(username="customer1", password="pass123")
+	user.groups.add(customer_group)
+	
+	response = client.post(
+		reverse("login"),
+		{
+			"username": "customer1",
+			"password": "pass123",
+		},
+	)
+
+	assert response.status_code == 302
+	assert response["Location"] == reverse("product_list")
+	
+	# Verify session was created
+	assert client.session.get("_auth_user_id") == str(user.id)
+
+
+@pytest.mark.django_db
+def test_employee_login_succeeds_and_redirects_to_dashboard(client):
+	"""Test that employee can login and is redirected to dashboard"""
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	user = User.objects.create_user(username="employee1", password="pass123")
+	user.groups.add(employee_group)
+	
+	response = client.post(
+		reverse("login"),
+		{
+			"username": "employee1",
+			"password": "pass123",
+		},
+	)
+
+	assert response.status_code == 302
+	assert response["Location"] == reverse("dashboard")
+	
+	# Verify session was created
+	assert client.session.get("_auth_user_id") == str(user.id)
+
+
+@pytest.mark.django_db
+def test_login_with_invalid_credentials_fails(client):
+	"""Test that login with invalid credentials fails"""
+	User.objects.create_user(username="validuser", password="correctpass")
+	
+	response = client.post(
+		reverse("login"),
+		{
+			"username": "validuser",
+			"password": "wrongpass",
+		},
+	)
+
+	assert response.status_code == 200
+	assert b"Invalid" in response.content or b"invalid" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_login_with_nonexistent_user_fails(client):
+	"""Test that login with nonexistent user fails"""
+	response = client.post(
+		reverse("login"),
+		{
+			"username": "nonexistent",
+			"password": "anypass",
+		},
+	)
+
+	assert response.status_code == 200
+	assert b"Invalid" in response.content or b"invalid" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_logout_clears_session(client):
+	"""Test that logout clears the user session"""
+	user = User.objects.create_user(username="testuser", password="pass123")
+	client.login(username="testuser", password="pass123")
+	
+	# Verify logged in
+	assert client.session.get("_auth_user_id") == str(user.id)
+	
+	response = client.get(reverse("logout"))
+	
+	assert response.status_code == 302
+	assert response["Location"] == reverse("login")
+	
+	# Verify session was cleared
+	assert client.session.get("_auth_user_id") is None
+
+
+@pytest.mark.django_db
+def test_product_creation_requires_employee(client):
+	"""Test that unauthenticated users cannot create products"""
+	response = client.get(reverse("product_create"))
+
+	# Should redirect to login since not authenticated
+	assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_employee_can_create_product(client):
+	"""Test that employee can create a product"""
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	employee = User.objects.create_user(username="emp1", password="pass123")
+	employee.groups.add(employee_group)
+	
+	client.login(username="emp1", password="pass123")
+	
+	response = client.post(
+		reverse("product_create"),
+		{
+			"name": "Employee Created Product",
+			"description": "Created by employee.",
+			"price": "19.99",
+			"in_stock": True,
+		},
+	)
+
+	assert response.status_code == 302
+	assert Product.objects.filter(name="Employee Created Product").exists()
+
+
+@pytest.mark.django_db
+def test_customer_cannot_create_product(client):
+	"""Test that customer cannot create a product"""
+	customer_group, _ = Group.objects.get_or_create(name="customer")
+	customer = User.objects.create_user(username="cust1", password="pass123")
+	customer.groups.add(customer_group)
+	
+	client.login(username="cust1", password="pass123")
+	
+	response = client.post(
+		reverse("product_create"),
+		{
+			"name": "Customer Created Product",
+			"description": "Should not be created.",
+			"price": "19.99",
+			"in_stock": True,
+		},
+	)
+
+	assert response.status_code == 403
+	assert not Product.objects.filter(name="Customer Created Product").exists()
+
+
+@pytest.mark.django_db
+def test_customer_can_create_order(client):
+	"""Test that customer can create an order"""
+	customer_group, _ = Group.objects.get_or_create(name="customer")
+	customer = User.objects.create_user(username="cust2", password="pass123")
+	customer.groups.add(customer_group)
+	
+	product = Product.objects.create(
+		name="Test Product",
+		description="For testing.",
+		price="25.00",
+		in_stock=True,
+	)
+	
+	client.login(username="cust2", password="pass123")
+	
+	response = client.post(
+		reverse("order_create"),
+		{
+			"customer_name": "Customer Test",
+			"products": [product.pk],
+		},
+	)
+
+	assert response.status_code == 302
+	created_order = Order.objects.get(customer_name="Customer Test")
+	assert created_order.customer == customer
+
+
+@pytest.mark.django_db
+def test_order_list_requires_employee(client):
+	"""Test that unauthenticated users cannot view order list"""
+	response = client.get(reverse("order_list"))
+
+	# Should redirect to login since not authenticated
+	assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_employee_can_view_order_list(client):
+	"""Test that employee can view all orders"""
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	employee = User.objects.create_user(username="emp2", password="pass123")
+	employee.groups.add(employee_group)
+	
+	# Create an order by a different user
+	product = Product.objects.create(
+		name="Product",
+		description="Test",
+		price="10.00",
+		in_stock=True,
+	)
+	order = Order.objects.create(customer_name="Someone Else")
+	order.products.add(product)
+	
+	client.login(username="emp2", password="pass123")
+	
+	response = client.get(reverse("order_list"))
+
+	assert response.status_code == 200
+	assert b"Someone Else" in response.content
+
+
+@pytest.mark.django_db
+def test_dashboard_requires_employee(client):
+	"""Test that unauthenticated users cannot view dashboard"""
+	response = client.get(reverse("dashboard"))
+
+	# Should redirect to login since not authenticated
+	assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_employee_can_view_dashboard(client):
+	"""Test that employee can view the dashboard"""
+	employee_group, _ = Group.objects.get_or_create(name="employee")
+	employee = User.objects.create_user(username="emp3", password="pass123")
+	employee.groups.add(employee_group)
+	
+	client.login(username="emp3", password="pass123")
+	
+	response = client.get(reverse("dashboard"))
+
+	assert response.status_code == 200
+	assert "shop/dashboard.html" in [t.name for t in response.templates]
+
+
+@pytest.mark.django_db
+def test_customer_cannot_view_dashboard(client):
+	"""Test that customer cannot view the dashboard"""
+	customer_group, _ = Group.objects.get_or_create(name="customer")
+	customer = User.objects.create_user(username="cust3", password="pass123")
+	customer.groups.add(customer_group)
+	
+	client.login(username="cust3", password="pass123")
+	
+	response = client.get(reverse("dashboard"))
+
+	assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_base_template_shows_logout_when_authenticated(client):
+	"""Test that base template shows logout link for authenticated users"""
+	user = User.objects.create_user(username="testuser2", password="pass123")
+	client.login(username="testuser2", password="pass123")
+	
+	response = client.get(reverse("home"))
+
+	assert response.status_code == 200
+	assert b"testuser2" in response.content or b"Welcome" in response.content
+	assert b"Logout" in response.content
+
+
+@pytest.mark.django_db
+def test_base_template_shows_login_when_not_authenticated(client):
+	"""Test that base template shows login/register links for unauthenticated users"""
+	response = client.get(reverse("home"))
+
+	assert response.status_code == 200
+	assert b"Login" in response.content
+	assert b"Register" in response.content
 

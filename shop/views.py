@@ -6,10 +6,26 @@ from pathlib import Path
 from django.conf import settings
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, TemplateView, UpdateView, View
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.http import HttpResponseRedirect
+from django.shortcuts import redirect
 
-from .forms import OrderForm
+from .forms import OrderForm, CustomerRegistrationForm
 from .models import Order, Product
+
+
+class IsEmployeeMixin(UserPassesTestMixin):
+	"""Mixin to check if user is in employee group"""
+	def test_func(self):
+		return self.request.user.groups.filter(name="employee").exists()
+
+
+class IsCustomerMixin(UserPassesTestMixin):
+	"""Mixin to check if user is in customer group"""
+	def test_func(self):
+		return self.request.user.groups.filter(name="customer").exists()
 
 
 class HomePageView(TemplateView):
@@ -31,46 +47,51 @@ class ProductDetailView(DetailView):
 	model = Product
 
 
-class ProductCreateView(CreateView):
+class ProductCreateView(IsEmployeeMixin, CreateView):
 	model = Product
 	fields = ["name", "description", "price", "in_stock"]
 
 
-class ProductUpdateView(UpdateView):
+class ProductUpdateView(IsEmployeeMixin, UpdateView):
 	model = Product
 	fields = ["name", "description", "price", "in_stock"]
 
 
-class ProductDeleteView(DeleteView):
+class ProductDeleteView(IsEmployeeMixin, DeleteView):
 	model = Product
 	success_url = reverse_lazy("product_list")
 
 
-class OrderListView(ListView):
+class OrderListView(IsEmployeeMixin, ListView):
 	model = Order
 	context_object_name = "orders"
 
 
-class OrderDetailView(DetailView):
+class OrderDetailView(IsEmployeeMixin, DetailView):
 	model = Order
 
 
-class OrderCreateView(CreateView):
+class OrderCreateView(LoginRequiredMixin, CreateView):
+	model = Order
+	form_class = OrderForm
+	login_url = "login"
+	
+	def form_valid(self, form):
+		form.instance.customer = self.request.user
+		return super().form_valid(form)
+
+
+class OrderUpdateView(IsEmployeeMixin, UpdateView):
 	model = Order
 	form_class = OrderForm
 
 
-class OrderUpdateView(UpdateView):
-	model = Order
-	form_class = OrderForm
-
-
-class OrderDeleteView(DeleteView):
+class OrderDeleteView(IsEmployeeMixin, DeleteView):
 	model = Order
 	success_url = reverse_lazy("order_list")
 
 
-class DashboardView(TemplateView):
+class DashboardView(IsEmployeeMixin, TemplateView):
 	template_name = "shop/dashboard.html"
 	log_limit = 50
 
@@ -127,3 +148,36 @@ class DashboardView(TemplateView):
 			)
 
 		return entries
+
+
+class CustomerRegistrationView(CreateView):
+	form_class = CustomerRegistrationForm
+	template_name = "shop/register.html"
+	success_url = reverse_lazy("login")
+
+
+class LoginView(TemplateView):
+	template_name = "shop/login.html"
+
+	def post(self, request, *args, **kwargs):
+		username = request.POST.get("username")
+		password = request.POST.get("password")
+		user = authenticate(request, username=username, password=password)
+		
+		if user is not None:
+			login(request, user)
+			# Redirect based on group membership
+			if user.groups.filter(name="employee").exists():
+				return redirect("dashboard")
+			else:
+				return redirect("product_list")
+		else:
+			context = self.get_context_data()
+			context["error"] = "Invalid username or password"
+			return self.render_to_response(context)
+
+
+class LogoutView(View):
+	def get(self, request, *args, **kwargs):
+		logout(request)
+		return redirect("login")

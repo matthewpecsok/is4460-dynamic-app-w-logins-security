@@ -13,10 +13,16 @@ from .views import (
     ProductDetailView,
     ProductListView,
     ProductUpdateView,
+    CustomerRegistrationView,
+    LoginView,
+    LogoutView,
 )
 
 urlpatterns = [
     path("", HomePageView.as_view(), name="home"),
+    path("register/", CustomerRegistrationView.as_view(), name="register"),
+    path("login/", LoginView.as_view(), name="login"),
+    path("logout/", LogoutView.as_view(), name="logout"),
     path("internal/dashboard/", DashboardView.as_view(), name="dashboard"),
     path("products/", ProductListView.as_view(), name="product_list"),
     path("products/new/", ProductCreateView.as_view(), name="product_create"),

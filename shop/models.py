@@ -1,5 +1,6 @@
 from django.db import models
 from django.urls import reverse
+from django.contrib.auth.models import User
 
 
 class Product(models.Model):
@@ -17,6 +18,7 @@ class Product(models.Model):
 
 
 class Order(models.Model):
+	customer = models.ForeignKey(User, on_delete=models.CASCADE, related_name="orders", null=True, blank=True)
 	customer_name = models.CharField(max_length=120)
 	products = models.ManyToManyField(Product, related_name="orders", blank=False)
 	created_at = models.DateTimeField(auto_now_add=True)
