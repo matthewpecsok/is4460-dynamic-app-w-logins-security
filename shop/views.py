@@ -88,20 +88,9 @@ class ProductListView(ListView):
 class ProductDetailView(DetailView):
 	model = Product
 
-
-class ProductCreateView(IsEmployeeMixin, CreateView):
+class ProductDetailView(DetailView):
 	model = Product
-	fields = ["name", "description", "price", "in_stock"]
 
-
-class ProductUpdateView(IsEmployeeMixin, UpdateView):
-	model = Product
-	fields = ["name", "description", "price", "in_stock"]
-
-
-class ProductDeleteView(IsEmployeeMixin, DeleteView):
-	model = Product
-	success_url = reverse_lazy("product_list")
 
 
 class OrderListView(OrderAccessMixin, ListView):

@@ -10,7 +10,7 @@
         {% for group in user.groups.all %}
             {% if group.name == "employee" %}
                 <div class="actions">
-                    <a class="button secondary" href="{% url 'product_create' %}">Create Product</a>
+                    <a class="button secondary" href="/admin/">Create Product</a>
                 </div>
             {% endif %}
         {% endfor %}
