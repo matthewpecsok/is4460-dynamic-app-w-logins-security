@@ -39,7 +39,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan Docker image for vulnerabilities
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/flower-shop:latest
           format: table
