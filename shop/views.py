@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import Counter, deque
 from datetime import timedelta
 from pathlib import Path
@@ -11,6 +12,8 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, T
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import get_object_or_404, redirect
+
+logger = logging.getLogger("flower_shop.auth")
 
 from .forms import CustomerCheckoutForm, CustomerOrderForm, CustomerRegistrationForm, OrderForm
 from .models import Order, Product
@@ -269,8 +272,15 @@ class LoginView(TemplateView):
 		password = request.POST.get("password")
 		next_url = request.POST.get("next") or request.GET.get("next")
 		user = authenticate(request, username=username, password=password)
-		
+		log_payload = {
+			"username": username,
+			"remote_addr": request.META.get("REMOTE_ADDR", ""),
+			"user_agent": request.META.get("HTTP_USER_AGENT", ""),
+		}
+
 		if user is not None:
+			log_payload["user_id"] = user.pk
+			logger.info("login.success", extra={"payload": log_payload})
 			login(request, user)
 			if next_url and url_has_allowed_host_and_scheme(
 				next_url,
@@ -284,6 +294,7 @@ class LoginView(TemplateView):
 			else:
 				return redirect("product_list")
 		else:
+			logger.warning("login.failed", extra={"payload": log_payload})
 			context = self.get_context_data()
 			context["error"] = "Invalid username or password"
 			return self.render_to_response(context)
@@ -291,5 +302,14 @@ class LoginView(TemplateView):
 
 class LogoutView(View):
 	def get(self, request, *args, **kwargs):
+		user = getattr(request, "user", None)
+		log_payload = {
+			"remote_addr": request.META.get("REMOTE_ADDR", ""),
+			"user_agent": request.META.get("HTTP_USER_AGENT", ""),
+		}
+		if user and user.is_authenticated:
+			log_payload["username"] = user.username
+			log_payload["user_id"] = user.pk
+			logger.info("logout.success", extra={"payload": log_payload})
 		logout(request)
 		return redirect("login")
