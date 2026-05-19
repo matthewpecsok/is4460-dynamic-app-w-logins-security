@@ -9,7 +9,8 @@
         "ms-python.vscode-pylance",
         "openai.chatgpt",
         "GitHub.copilot",
-        "GitHub.copilot-chat"
+        "GitHub.copilot-chat",
+        "qwtel.sqlite-viewer"
       ]
     }
   }
