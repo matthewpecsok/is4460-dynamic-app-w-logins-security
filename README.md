@@ -28,7 +28,20 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-4. Run unit tests:
+4. Run with Docker:
+
+```bash
+docker build -t flower-shop .
+docker run -p 8000:8000 flower-shop
+```
+
+Or using Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+5. Run unit tests:
 
 ```bash
 python manage.py test
