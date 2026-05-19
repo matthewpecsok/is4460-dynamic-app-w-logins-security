@@ -7,6 +7,7 @@ Simple Django online flower shop application with:
 - Order model and full CRUD
 - Order-to-product many-to-many relationship
 - Unit tests for homepage and all CRUD use cases
+- Includes Docker build for GitHub Actions
 
 ## Quick Start
 
